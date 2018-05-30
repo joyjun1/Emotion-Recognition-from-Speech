@@ -1,3 +1,4 @@
+# -*- coding:utf-8 -*-
 from pyAudioAnalysis import audioFeatureExtraction
 from sklearn.metrics import classification_report, accuracy_score, precision_recall_fscore_support
 from sklearn import svm
@@ -35,13 +36,14 @@ if __name__ == '__main__':
 
 	if load_data:
 		print "Loading data from " + db_type + " dataset..."
-		if db_type not in ('dafex','berlin'):
+		if db_type not in ('dafex','berlin','casia'):
 			sys.exit("Dataset not registered. Please create a method to read it")
 
 		db = Dataset(path,db_type,decode=False)
 
 		print "Saving " + db_type + " dataset info to file..."
-		cPickle.dump(db, open(db_type + '_db.p', 'wb')) 
+		cPickle.dump(db, open(db_type + '_db.p', 'wb')) # https://blog.csdn.net/u010402786/article/details/51161828
+		# cPickle used to save and load data of fixed structure
 	else:
 		print "Getting data from " + db_type + " dataset..."
 		db = cPickle.load(open(db_type + '_db.p', 'rb'))
@@ -56,9 +58,9 @@ if __name__ == '__main__':
 		i = 0
 		for (x,Fs) in db.data:
 			F = audioFeatureExtraction.stFeatureExtraction(x, Fs, win_size*Fs, step*Fs)
-			Fglobal.append( np.concatenate((	np.mean(F, axis=1),
-												np.std(F, axis=1))))
-
+			Fglobal.append( np.concatenate((	np.mean(F, axis=1), # axis =1 ：压缩列，对各行求均值，返回 m *1 矩阵
+												np.std(F, axis=1)))) # 计算每一行的标准差
+                            # 数据拼接
 			sys.stdout.write("\033[F") # cursor up one line
 			i = i+1; print "Extracting features " + str(i) + '/' + str(n_samples) + " from data..."
 
@@ -66,7 +68,7 @@ if __name__ == '__main__':
 		cPickle.dump(Fglobal, open(db_type + '_features.p', 'wb')) 
 	else:
 		print "Getting features from files..."
-		Fglobal = cPickle.load(open(db_type + '_features.p', 'rb'))
+		Fglobal = cPickle.load(open(db_type + '_features.p', 'rb')) # Fglobal: features
 
 	Fglobal = np.array(Fglobal)
 	y = np.array(db.targets)
@@ -78,7 +80,7 @@ if __name__ == '__main__':
 		k_folds = len(db.test_sets)
 		splits = zip(db.train_sets,db.test_sets)
 	else:
-		k_folds = 10
+		k_folds = 10 # 交叉验证，分为k个子样本
 		sss = StratifiedShuffleSplit(n_splits=k_folds, test_size=0.2, random_state=1)
 		splits = sss.split(Fglobal, y)
 
@@ -86,31 +88,38 @@ if __name__ == '__main__':
 	pp = Preprocessor('standard',n_components=50)
 	n_classes = len(db.classes)
 	clf = OneVsRestClassifier(svm.SVC(kernel='rbf',C=10, gamma=0.01))
+    # C惩罚参数，值越大，训练准确率高，泛化能力弱
+    # gamma 不知道干嘛的
+    # one vs rest, Also known as one-vs-all
 	prfs = []; scores = []; acc = np.zeros(n_classes)
 	mi_threshold = 0.0
 	for (train,test) in splits:
 		# selecting features using mutual information
 		Ftrain = Fglobal[train]; Ftest = Fglobal[test]
 		f_subset = pp.mutual_info_select(Ftrain,y[train],mi_threshold)
+		# 通过互信息选择特征
+        # 互信息 阈值 特征选择
 		Ftrain = Ftrain[:,f_subset]; Ftest = Ftest[:,f_subset]
 		
 		#standard transformation
 		(Ftrain,Ftest) = pp.standardize(Ftrain,Ftest)
 		
-		# eigenspectrum over all data
+		# eigenspectrum over all data 所有数据特征值
 		if plot_eigenspectrum:
 			es = Eigenspectrum(Ftrain)
 			es.show()
 		
 		(Ftrain,Ftest) = pp.project_on_pc(Ftrain,Ftest)
 
-		clf.fit(Ftrain, y[train])
+		clf.fit(Ftrain, y[train]) # 表示用数据X来训练PCA模型
 		ypred = clf.predict(Ftest)
 
 		#print clf.score(Ftest, y[test])
-		scores.append(clf.score(Ftest, y[test]))
+		scores.append(clf.score(Ftest, y[test])) # Returns the mean accuracy on the given test data and labels
 		#print precision_recall_fscore_support(y[test], ypred)
 		prfs.append(precision_recall_fscore_support(y[test], ypred))
+        # http://www.cnblogs.com/549294286/p/3621740.html
+        # 召回率：Recall，又称“查全率”;准确率：Precision，又称“精度”、“正确率”
 
 	# mean total accuracy
 	print("\nAccuracy =  %0.2f (%0.2f)\n" % (np.mean(scores), np.std(scores)))

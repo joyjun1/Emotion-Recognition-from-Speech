@@ -19,6 +19,9 @@ class Dataset:
 		elif type == "dafex":
 			self.classes = {0:'ang', 1:'dis', 2:'fea', 3:'hap', 4:'neu', 5:'sad', 6:'sur'}
 			self.get_dafex_dataset(path,decode)
+		elif type == "casia":
+			self.classes = {0:'angry', 1:'fear', 2:'happy', 3:'neutral', 4:'sad', 5:'surprise'}
+			self.get_casia_dataset(path)
 
 	def get_berlin_dataset(self,path):
 		males = ['03','10','11','12','15']
@@ -76,3 +79,32 @@ class Dataset:
 			self.train_sets.append(train)
 			self.test_sets.append(test)
 			get_data = False
+
+	def get_casia_dataset(self, root_path):
+		speakers = []
+		classes = {v: k for k, v in self.classes.iteritems() }
+		print classes
+		self.targets = []; self.data = []; self.train_sets = []; self.test_sets =[]; get_data = True;audio_files_number = 0;
+		for speaker in os.listdir(root_path):
+			speakers.append(speaker)
+			test = []
+			print speakers
+			for emotion in os.listdir(os.path.join(root_path, speaker)):
+				print emotion
+				if os.path.isdir(os.path.join(root_path, speaker, emotion)):
+					for audio_files in os.listdir(os.path.join(root_path, speaker, emotion)):
+						if audio_files[-3: ] == 'wav':
+							audio_files_path = os.path.join(root_path, speaker, emotion, audio_files)
+							# print audio_files
+							[Fs, x] = audioBasicIO.readAudioFile(audio_files_path)
+							self.data.append((x, Fs))
+							self.targets.append(classes[emotion])
+							test.append(audio_files_number)
+							audio_files_number += 1
+			self.test_sets.append(test)
+		for speaker in range(len(speakers)):
+			train = []
+			for i in range(audio_files_number):
+				if i not in self.test_sets[speaker]:
+					train.append(i)
+					self.train_sets.append(train)
